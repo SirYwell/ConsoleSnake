@@ -1,19 +1,18 @@
-// SnakeGame.cpp : Definiert den Einstiegspunkt f�r die Konsolenanwendung.
-//
-
-#include "stdafx.h"
+﻿#include "stdafx.h"
 #include <cstdlib>
 #include <iostream>
 #include <windows.h>
 #include <conio.h>
+#include <list>
+#include <random>
 
-//Tasten (wasd)
+// Tasten (wasd)
 #define KEY_UP 119
 #define KEY_DOWN 115
 #define KEY_LEFT 97
 #define KEY_RIGHT 100
 
-//Richtungen
+// Richtungen
 #define UP 0
 #define RIGHT 1
 #define DOWN 2
@@ -22,28 +21,23 @@
 using namespace std;
 
 HANDLE console = GetStdHandle(STD_OUTPUT_HANDLE);
-int lastKey = -1; //Zuletzt gedr�ckte Taste
 
+int lastKey = -1; //Zuletzt gedrückte Taste
+list<COORD> coords;
+COORD item;
+bool alive = true;
+int score = 0;
+
+/* Nicht benötigt, nur für Farbgebungs-Testzwecke
 void showColor(int color)
 {
 	SetConsoleTextAttribute(console, color);
 	cout << "Test " << color << endl;
-}
+}*/
 
-void go(int direction)
+void setCursorPosition(COORD coord)
 {
-	cout << "Ich gehe in Richtung " << direction << endl;
-}
-
-void drawField(int height, int width)
-{
-	system("color 27");
-	for (int a = 0; a < height; a++) {
-		for (int b = 0; b < width; b++) {
-			cout << " ";
-		}
-		cout << endl;
-	}
+	SetConsoleCursorPosition(console, coord);
 }
 
 void setCursorPosition(int x, int y)
@@ -51,9 +45,84 @@ void setCursorPosition(int x, int y)
 	COORD coord;
 	coord.X = x;
 	coord.Y = y;
-	SetConsoleCursorPosition(console, coord);
+	setCursorPosition(coord);
 }
 
+// Zeichnet die Spielfeldumrandung und legt die Farbgebung fest
+void drawField(int height, int width)
+{
+	system("color 27");
+	setCursorPosition(0, 0);
+	cout << "+--------------------------------------------------------------------------------+";
+	for (int l = 1; l < 29; l++)
+	{
+		setCursorPosition(0, l);
+		cout << "|";
+		setCursorPosition(81, l);
+		cout << "|";
+	}
+	setCursorPosition(0, 29);
+	cout << "+--------------------------------------------------------------------------------+";
+}
+
+// Gibt jeweilige Koordinate in entsprechende Richtung zurück
+// Die Koordinate wird kopiert, da sie sich sonst mitverändert
+/*-------------------------*/
+COORD goRight() 
+{
+	COORD copy = coords.front();
+	copy.X--;
+	return copy;
+}
+
+COORD goLeft()
+{
+	COORD copy = coords.front();
+	copy.X++;
+	return copy;
+}
+
+COORD goUpper()
+{
+	COORD copy = coords.front();
+	copy.Y--;
+	return copy;
+}
+
+COORD goLower()
+{
+	COORD copy = coords.front();
+	copy.Y++;
+	return copy;
+}
+/*------------------------*/
+
+// Gibt nächste Koordinate in gegebener Richtung zurück
+// "Umwandlung" der Richtungszahl in Koordinate
+COORD getNextCoord()
+{
+	COORD c;
+	switch (lastKey)
+	{
+	case UP:
+		c = goUpper();
+		break;
+	case DOWN:
+		c = goLower();
+		break;
+	case RIGHT:
+		c = goRight();
+		break;
+	case LEFT:
+		c = goLeft();
+		break;
+	default:
+		break;
+	}
+	return c;
+}
+
+// Überprüft auf gedrückte Taste (WASD), sonst -1
 char getNextKey()
 {
 	int result = -1;
@@ -81,7 +150,26 @@ char getNextKey()
 	return result;
 }
 
-void waitUntilStart() {
+// Schreibt das Item an eine zufallsgenerierte Position
+void generateItem() {
+	std::random_device rd;
+	std::mt19937 rng(rd());    
+	int min = 1;
+	int max = 79;
+	std::uniform_int_distribution<int> cgen(min, max); 
+	auto col = cgen(rng);
+	max = 28;
+	std::uniform_int_distribution<int> rgen(min, max);
+	auto row = rgen(rng);
+	item.X = col;
+	item.Y = row;
+	setCursorPosition(item);
+	cout << "#";
+}
+
+// Warte, bis der Spieler ein Taste (WASD) drückt
+void waitUntilStart() 
+{
 	setCursorPosition(0, 1);
 	bool started = false;
 	int key = 0;
@@ -96,37 +184,72 @@ void waitUntilStart() {
 	}
 }
 
+// Nächster "Schritt"
+void go(int direction)
+{
+	COORD next = getNextCoord();
+	coords.push_front(next);
+	if (next.X == item.X && next.Y == item.Y) // Überprüft, ob an der nächsten Position das Item ist
+	{
+		score++;
+		generateItem(); // Generiert neues Item
+	}
+	else if (next.Y == 0 || next.Y == 29 || next.X == 0 || next.X == 81) // Uberprüft auf Umrandung -> Game Over
+	{
+		setCursorPosition(84, 5);
+		cout << "GAME OVER!";
+		alive = false;
+		return;
+	}
+	else { 
+		setCursorPosition(coords.back().X, coords.back().Y); // löscht letztes Zeichen der Schlange
+		cout << " ";
+		coords.pop_back();
+	}
+	setCursorPosition(coords.front());
+	cout << "O";
+}
+
 int main()
 {
 	CONSOLE_CURSOR_INFO cursor;
 	cursor.bVisible = false;
 	cursor.dwSize = 20;
 	SetConsoleCursorInfo(console, &cursor);
-	/*for(int a = 0x00; a < 0xff; a++)
-	{
-	showColor(a);
-	}*/
 	drawField(30, 100);
-	int min = 10;
-	int max = 90;
-	int col = min + (rand() % static_cast<int>(max - min + 1));
-	max = 20;
-	int row = min + (rand() % static_cast<int>(max - min + 1));
+
+	std::random_device rd;     
+	std::mt19937 rng(rd());    
+	int min = 2;
+	int max = 79;
+	std::uniform_int_distribution<int> cgen(min, max); // guaranteed unbiased
+	auto col =  cgen(rng);
+	max = 28;
+	std::uniform_int_distribution<int> rgen(min, max);
+	auto row = rgen(rng);
 	COORD coord;
 	coord.X = col;
 	coord.Y = row;
-	SetConsoleCursorPosition(console, coord);
+	setCursorPosition(1, 1);
+	setCursorPosition(coord);
 	cout << "O";
+	coords.push_front(coord);
+	generateItem();
 	waitUntilStart();
-	while (true)
+	while (alive)
 	{
-		Sleep(500);
+		setCursorPosition(85, 2);
+		cout << "Score: " << score;
+		Sleep(250);
 		int key = getNextKey();
 		if (key != -1)
 		{
-			lastKey = key; //Update falls neue Richtungstaste gerdr�ckt wurde
+			lastKey = key; // Update falls neue Richtungstaste gerdrückt wurde
 		}
 		go(lastKey);
+	}
+	while (!alive) {
+
 	}
 	return 0;
 }
